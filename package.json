@@ -62,7 +62,7 @@
     "jquery": "2.2.4"
   },
   "dependencies": {
-    "fixed-data-table": "^0.6.0",
+    "fixed-data-table-2": "^0.6.6",
     "react": "0.14.8",
     "react-dom": "0.14.8",
     "responsive-fixed-data-table": "^2.0.0",

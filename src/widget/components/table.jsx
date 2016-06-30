@@ -4,7 +4,11 @@ import React from "react";
 import { Column, Cell } from "fixed-data-table";
 import ResponsiveFixedDataTable from "responsive-fixed-data-table";
 
+var $ = require("jquery");
+
 const Table = React.createClass({
+
+  contentHeightChangeVal: 0,
 
   createMarkup: function(html) {
     return {
@@ -75,6 +79,26 @@ const Table = React.createClass({
     return "";
   },
 
+  handleContentHeightChange: function(height) {
+    console.log("handleContentHeightChange", height);
+    this.contentHeightChangeVal = height;
+  },
+
+  getRowHeight: function(index) {
+    var $cells = $(".fixedDataTableLayout_rowsContainer div .fixedDataTableRowLayout_rowWrapper").eq(index).find(".public_fixedDataTableCell_cellContent"),
+      height = this.props.rowHeight,
+      that = this;
+
+    $cells.each(function () {
+      if ($(this).outerHeight() > that.props.rowHeight) {
+        height = $(this).outerHeight();
+        return false;
+      }
+    });
+
+    return height;
+  },
+
   render: function() {
     var cols = [];
 
@@ -102,6 +126,8 @@ const Table = React.createClass({
     return(
       <ResponsiveFixedDataTable
         rowHeight={this.props.rowHeight}
+        rowHeightGetter={this.getRowHeight}
+        onContentHeightChange={this.handleContentHeightChange}
         rowsCount={this.props.data.length}
         rowClassNameGetter={this.getRowClassName}
         width={this.props.width}
