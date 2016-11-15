@@ -11,16 +11,16 @@ import "../../components/gsap/src/uncompressed/plugins/ScrollToPlugin";
 
 import "../../components/auto-scroll/jquery.auto-scroll";
 
-const Scroll = React.createClass({
+class Scroll extends React.Component {
+  constructor( props ) {
+    super( props );
+  }
 
-  scroll: "",
-  height: 0,
-
-  componentWillMount: function () {
+  componentWillMount() {
     this.height = this.props.height;
-  },
+  }
 
-  componentWillUpdate: function(nextProps, nextState) {
+  componentWillUpdate( nextProps, nextState ) {
     this.height = (nextProps.data.length * nextProps.rowHeight) + ((nextProps.hasHeader) ? nextProps.rowHeight : 0)
     $(this.refs.page).height(this.height);
 
@@ -28,15 +28,15 @@ const Scroll = React.createClass({
     this.scroll.autoScroll(nextProps.scroll).on("done", () => {
       nextProps.onDone();
     });
-  },
+  }
 
-  componentDidUpdate: function() {
+  componentDidUpdate() {
     if (this.canScroll()) {
       this.play();
     }
-  },
+  }
 
-  componentDidMount: function() {
+  componentDidMount() {
     this.scroll = $(this.refs.scroll);
     this.height = (this.props.data.length * this.props.rowHeight) + ((this.props.hasHeader) ? this.props.rowHeight : 0)
 
@@ -45,28 +45,27 @@ const Scroll = React.createClass({
     this.scroll.autoScroll(this.props.scroll).on("done", () => {
       this.props.onDone();
     });
-  },
+  }
 
-  canScroll: function() {
+  canScroll() {
     return this.props.scroll.by !== "none" && this.scroll && this.scroll.data("plugin_autoScroll") &&
       this.scroll.data("plugin_autoScroll").canScroll();
-  },
+  }
 
-  play: function() {
+  play() {
     if (this.scroll && this.scroll.data("plugin_autoScroll")) {
       this.scroll.data("plugin_autoScroll").play();
     }
-  },
+  }
 
-  pause: function() {
+  pause() {
     if (this.scroll && this.scroll.data("plugin_autoScroll")) {
       this.scroll.data("plugin_autoScroll").pause();
     }
-  },
+  }
 
-  render: function() {
-
-    return(
+  render() {
+    return (
       <div id="scroll" ref="scroll">
         <section className="page" ref="page">
             <Table
@@ -82,6 +81,6 @@ const Scroll = React.createClass({
       </div>
     );
   }
-});
+}
 
 export default Scroll;
