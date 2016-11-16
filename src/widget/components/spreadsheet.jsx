@@ -580,6 +580,13 @@ const Spreadsheet = React.createClass({
     return this.state.data.length > 1;
   },
 
+  getTableHeight() {
+    const data = this.getRows();
+    const { format, spreadsheet } = params;
+
+    return ( data.length * format.rowHeight ) + ( spreadsheet.hasHeader ? format.rowHeight : 0 );
+  },
+
   render: function() {
     if (this.state.data) {
       this.totalCols = this.state.data[0].length;
@@ -606,7 +613,7 @@ const Spreadsheet = React.createClass({
               totalCols={this.totalCols}
               rowHeight={params.format.rowHeight}
               width={params.width}
-              height={params.spreadsheet.hasHeader ? params.height - params.format.rowHeight : params.height}
+              height={ this.getTableHeight() }
               columnFormats={this.getColumnFormats()} />
           : false}
         </div>

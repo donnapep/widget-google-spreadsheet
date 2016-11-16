@@ -16,35 +16,31 @@ class Scroll extends React.Component {
     super( props );
   }
 
-  componentWillMount() {
-    this.height = this.props.height;
-  }
-
-  componentWillUpdate( nextProps, nextState ) {
-    this.height = (nextProps.data.length * nextProps.rowHeight) + ((nextProps.hasHeader) ? nextProps.rowHeight : 0)
-    $(this.refs.page).height(this.height);
-
-    this.scroll.data("plugin_autoScroll").destroy();
-    this.scroll.autoScroll(nextProps.scroll).on("done", () => {
-      nextProps.onDone();
-    });
+  componentDidMount() {
+    this.scroll = $( this.refs.scroll );
+    this.initScroll();
   }
 
   componentDidUpdate() {
-    if (this.canScroll()) {
-      this.play();
+    const { onDone, scroll } = this.props;
+
+    if ( this.scroll ) {
+      this.scroll.autoScroll( scroll ).off( "done", onDone );
+      this.scroll.data( "plugin_autoScroll" ).destroy();
+      this.initScroll();
+
+      if ( this.canScroll() ) {
+        this.play();
+      }
     }
   }
 
-  componentDidMount() {
-    this.scroll = $(this.refs.scroll);
-    this.height = (this.props.data.length * this.props.rowHeight) + ((this.props.hasHeader) ? this.props.rowHeight : 0)
+  initScroll() {
+    const { onDone, scroll } = this.props;
 
-    $(this.refs.page).height(this.height);
-
-    this.scroll.autoScroll(this.props.scroll).on("done", () => {
-      this.props.onDone();
-    });
+    if ( this.scroll ) {
+      this.scroll.autoScroll( scroll ).on( "done", onDone );
+    }
   }
 
   canScroll() {
@@ -65,9 +61,11 @@ class Scroll extends React.Component {
   }
 
   render() {
+    const { height } = this.props;
+
     return (
       <div id="scroll" ref="scroll">
-        <section className="page" ref="page">
+        <section className="page" style={ { height: height + "px" } }>
             <Table
               data={this.props.data}
               align={this.props.align}
@@ -75,7 +73,7 @@ class Scroll extends React.Component {
               totalCols={this.props.totalCols}
               rowHeight={this.props.rowHeight}
               width={this.props.width}
-              height={this.height}
+              height={ height }
               columnFormats={this.props.columnFormats} />
         </section>
       </div>
