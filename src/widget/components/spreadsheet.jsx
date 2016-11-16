@@ -5,6 +5,7 @@ require("../css/fixed-data-table-overrides.css");
 
 import React from "react";
 import Scroll from "./scroll";
+import Table from "./table";
 import TableHeaderContainer from "../containers/TableHeaderContainer";
 import Logger from "../../components/widget-common/dist/logger";
 import Common from "../../components/widget-common/dist/common";
@@ -589,32 +590,37 @@ const Spreadsheet = React.createClass({
 
   render: function() {
     if (this.state.data) {
+      const { format, scroll, spreadsheet, width } = params;
+      const tableHeight = this.getTableHeight();
+
       this.totalCols = this.state.data[0].length;
 
       return(
         <div id="table">
-        {params.spreadsheet.hasHeader ?
+        { spreadsheet.hasHeader ?
           <TableHeaderContainer
-            align={params.format.header.fontStyle.align}
+            align={ format.header.fontStyle.align }
             data={this.getHeaders()}
-            width={params.width}
-            height={params.format.rowHeight}
+            width={ width }
+            height={ format.rowHeight }
             columnFormats={this.getColumnFormats()} />
             : false}
           {this.canRenderBody() ?
             <Scroll
               ref="scrollComponent"
-              onDone={this.done}
-              hasHeader={params.spreadsheet.hasHeader}
-              scroll={params.scroll}
-              data={this.getRows()}
-              align={params.format.body.fontStyle.align}
-              class={this.bodyClass}
-              totalCols={this.totalCols}
-              rowHeight={params.format.rowHeight}
-              width={params.width}
-              height={ this.getTableHeight() }
-              columnFormats={this.getColumnFormats()} />
+              height={ tableHeight }
+              scroll={ scroll }
+              onDone={ this.done }>
+              <Table
+                data={ this.getRows() }
+                align={ format.body.fontStyle.align }
+                class={ this.bodyClass }
+                totalCols={ this.totalCols }
+                rowHeight={ format.rowHeight }
+                width={ width }
+                height={ tableHeight }
+                columnFormats={ this.getColumnFormats() } />
+            </Scroll>
           : false}
         </div>
       );

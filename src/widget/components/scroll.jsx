@@ -1,7 +1,6 @@
 require("fixed-data-table/dist/fixed-data-table.min.css");
 
 import React from "react";
-import Table from "./table";
 
 var $ = require("jquery");
 import "../../components/gsap/src/uncompressed/TweenLite"
@@ -66,15 +65,7 @@ class Scroll extends React.Component {
     return (
       <div id="scroll" ref="scroll">
         <section className="page" style={ { height: height + "px" } }>
-            <Table
-              data={this.props.data}
-              align={this.props.align}
-              class={this.props.class}
-              totalCols={this.props.totalCols}
-              rowHeight={this.props.rowHeight}
-              width={this.props.width}
-              height={ height }
-              columnFormats={this.props.columnFormats} />
+          { this.props.children }
         </section>
       </div>
     );
