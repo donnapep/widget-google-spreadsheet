@@ -20,18 +20,22 @@ class Scroll extends React.Component {
     this.initScroll();
   }
 
-  componentDidUpdate() {
-    const { onDone, scroll } = this.props;
+  componentWillReceiveProps(nextProps) {
+    this.resize = this.scroll && ( this.props.height !== nextProps.height );
+  }
 
-    if ( this.scroll ) {
-      this.scroll.autoScroll( scroll ).off( "done", onDone );
-      this.scroll.data( "plugin_autoScroll" ).destroy();
-      this.initScroll();
+  componentDidUpdate() {
+    if ( this.resize ) {
+      $( this.scroll.data( "plugin_autoScroll" ).element ).trigger( "resize" );
 
       if ( this.canScroll() ) {
         this.play();
       }
     }
+  }
+
+  componentWillUnmount() {
+    this.destroyScroll();
   }
 
   initScroll() {
@@ -45,6 +49,15 @@ class Scroll extends React.Component {
   canScroll() {
     return this.props.scroll.by !== "none" && this.scroll && this.scroll.data("plugin_autoScroll") &&
       this.scroll.data("plugin_autoScroll").canScroll();
+  }
+
+  destroyScroll() {
+    const { onDone, scroll } = this.props;
+
+    if ( this.scroll ) {
+      this.scroll.autoScroll( scroll ).off( "done", onDone );
+      this.scroll.data( "plugin_autoScroll" ).destroy();
+    }
   }
 
   play() {
