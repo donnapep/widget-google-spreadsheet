@@ -1,73 +1,66 @@
 /* global describe, before, beforeEach, after, afterEach, it, sinon, xit  */
 
 import React from "react";
-import { mount } from "enzyme";
+import { mount, shallow } from "enzyme";
 import { expect } from "chai";
-import Spreadsheet from "../../../src/widget/components/spreadsheet";
-import TableHeaderContainer from "../../../src/widget/containers/TableHeaderContainer";
-import Table from "../../../src/widget/components/table";
-import Scroll from "../../../src/widget/components/scroll";
 import LoggerUtils from "../../../src/components/widget-common/dist/logger";
+import Scroll from "../../../src/widget/components/scroll";
+import Spreadsheet from "../../../src/widget/components/spreadsheet";
+import TableHeader from "../../../src/widget/components/table-header";
 import "../../data/spreadsheet";
 
-describe( "<Spreadsheet />", function() {
+describe( "<Spreadsheet />", () => {
   let server,
     wrapper;
-  const data = [ [ "Column 1", "Column 2", "Column 3" ], [ "A2", "B2", "C2" ] ],
-    additionalParams = window.gadget.settings.additionalParams,
-    columnsParam = additionalParams.format.columns;
 
-  var propHandlers = {
-    initSize: function() {},
-    showMessage: function() {},
-    hideMessage: function() {}
-  };
+  const additionalParams = window.gadget.settings.additionalParams,
+    columnsParam = additionalParams.format.columns,
+    data = [
+      [ "Column 1", "Column 2", "Column 3" ],
+      [ "A2", "B2", "C2" ]
+    ];
 
-  before( function() {
+  before( () => {
     server = sinon.fakeServer.create();
     server.respondImmediately = true;
     server.respondWith( "GET", "https://sheets.googleapis.com/v4/spreadsheets/xxxxxxxxxx?key=abc123",
       [ 200, { "Content-Type": "application/json" },
         "{ \"sheets\": [{ \"properties\": { \"title\": \"Sheet1\" } }] }" ] );
     server.respondWith( "POST", "https://www.googleapis.com/oauth2/v3/token", [ 200, { "Content-Type": "text/html" }, "OK" ] );
-
   } );
 
-  beforeEach( function() {
-    wrapper = mount( <Spreadsheet initSize={propHandlers.initSize}
-                                 showMessage={propHandlers.showMessage}
-                                 hideMessage={propHandlers.hideMessage} /> );
+  beforeEach( () => {
+    wrapper = shallow(
+      <Spreadsheet
+        { ...additionalParams }
+        height={ window.innerHeight }
+        width={ window.innerWidth } />
+    );
   } );
 
-  after( function() {
+  after( () => {
     server.restore();
   } );
 
-  it( "Should have an initial data state", function() {
-    expect( wrapper.state().data ).to.be.null;
+  it( "Should have an initial data state", () => {
+    expect( wrapper.state() ).to.deep.equal( { data: null, message: "" } );
   } );
 
-  describe( "<TableHeaderContainer />", function() {
-    beforeEach( function() {
-      wrapper.setState( { data: data } );
+  describe( "<TableHeader />", () => {
+    beforeEach( () => {
+      wrapper.setState( { data } );
     } );
 
-    it( "Should contain a TableHeaderContainer component", function() {
-      expect( wrapper.find( TableHeaderContainer ) ).to.have.length( 1 );
+    it( "Should contain a TableHeader component", () => {
+      expect( wrapper.find( TableHeader ) ).to.have.length( 1 );
     } );
 
-    it( "Should have align prop", function() {
-      expect( wrapper.find( TableHeaderContainer ).props().align ).to.equal( additionalParams.format.header.fontStyle.align );
+    it( "Should have align prop", () => {
+      expect( wrapper.find( TableHeader ).props().align ).to.equal( additionalParams.format.header.fontStyle.align );
     } );
 
-    it( "Should have data prop", function() {
-      var expected = [ additionalParams.format.columns[ 0 ].headerText, "Column 2", "Column 3" ];
-
-      expect( wrapper.find( TableHeaderContainer ).props().data ).to.deep.equal( expected );
-    } );
-
-    it( "Should have columnFormats prop", function() {
-      var expected = [
+    it( "Should have columnFormats prop", () => {
+      const expected = [
         {
           id: additionalParams.format.columns[ 0 ].id,
           numeric: false,
@@ -83,48 +76,61 @@ describe( "<Spreadsheet />", function() {
         }
       ];
 
-      expect( wrapper.find( TableHeaderContainer ).props().columnFormats ).to.deep.equal( expected );
+      expect( wrapper.find( TableHeader ).props().columnFormats ).to.deep.equal( expected );
     } );
 
-    it( "Should have height prop", function() {
-      expect( wrapper.find( TableHeaderContainer ).props().height ).to.equal( additionalParams.format.rowHeight );
+    it( "Should have data prop", () => {
+      const expected = [ additionalParams.format.columns[ 0 ].headerText, "Column 2", "Column 3" ];
+
+      expect( wrapper.find( TableHeader ).props().data ).to.deep.equal( expected );
     } );
 
-    it( "Should have width prop", function() {
-      expect( wrapper.find( TableHeaderContainer ).props().width ).to.equal( window.innerWidth );
+    it( "Should have height prop", () => {
+      expect( wrapper.find( TableHeader ).props().height ).to.equal( additionalParams.format.rowHeight );
+    } );
+
+    it( "Should have width prop", () => {
+      expect( wrapper.find( TableHeader ).props().width ).to.equal( window.innerWidth );
     } );
   } );
 
-  describe( "No <TableHeaderContainer />", function() {
-    beforeEach( function() {
+  describe( "No <TableHeader />", () => {
+    beforeEach( () => {
       additionalParams.spreadsheet.hasHeader = false;
-      wrapper = mount( <Spreadsheet initSize={propHandlers.initSize}
-                                   showMessage={propHandlers.showMessage}
-                                   hideMessage={propHandlers.hideMessage} /> );
+      wrapper = shallow(
+        <Spreadsheet
+          { ...additionalParams }
+          height={ window.innerHeight }
+          width={ window.innerWidth } />
+      );
 
-      wrapper.setState( { data: data } );
+      wrapper.setState( { data } );
     } );
 
-    afterEach( function() {
+    afterEach( () => {
       additionalParams.spreadsheet.hasHeader = true;
     } );
 
-    it( "Should not contain a TableHeaderContainer component", function() {
-      expect( wrapper.find( TableHeaderContainer ) ).to.have.length( 0 );
+    it( "Should not contain a TableHeader component", () => {
+      expect( wrapper.find( TableHeader ) ).to.have.length( 0 );
     } );
 
-    it( "Should pass the correct height prop for the Table component", function() {
-      expect( wrapper.find( Table ).props().height ).to.equal( window.innerHeight );
+    it( "Should pass the correct height prop for the Scroll component", () => {
+      expect( wrapper.find( Scroll ).props().height ).to.equal( window.innerHeight );
     } );
   } );
 
-  describe( "<Scroll />", function() {
-    beforeEach( function() {
-      wrapper.setState( { data: data } );
+  describe( "<Scroll />", () => {
+    beforeEach( () => {
+      wrapper.setState( { data } );
     } );
 
-    it( "Should have columnFormats prop", function() {
-      var expected = [
+    it( "Should contain a Scroll component", () => {
+      expect( wrapper.find( Scroll ) ).to.have.length( 1 );
+    } );
+
+    it( "Should have columnFormats prop", () => {
+      const expected = [
         {
           id: additionalParams.format.columns[ 0 ].id,
           numeric: false,
@@ -144,12 +150,35 @@ describe( "<Spreadsheet />", function() {
     } );
   } );
 
-  describe( "Refreshing", function() {
-    beforeEach( function() {
-      wrapper.setState( { data: data } );
+  describe( "Messaging", () => {
+    it( "Should not show a message", () => {
+      wrapper.setState( { data, message: "" } );
+
+      expect( wrapper.find( ".messageContainer" ) ).to.have.length( 0 );
     } );
 
-    it( "should update the state", function() {
+    it( "Should show a message", () => {
+      const message = "This is a message";
+
+      wrapper.setState( { data, message } );
+
+      expect( wrapper.html() ).to.equal( `<div class="main"><div class="messageContainer"><p class="message">${ message }</p></div></div>` );
+    } );
+  } );
+
+  describe( "Refreshing", () => {
+    beforeEach( () => {
+      wrapper = mount(
+        <Spreadsheet
+          { ...additionalParams }
+          height={ window.innerHeight }
+          width={ window.innerWidth } />
+      );
+
+      wrapper.setState( { data } );
+    } );
+
+    it( "should update the state", () => {
       const event = document.createEvent( "Event" ),
         sheet = document.getElementById( "rise-google-sheet" ),
         newData = [ [ "Column 1" ], [ "Test data" ] ];
@@ -164,14 +193,22 @@ describe( "<Spreadsheet />", function() {
     } );
   } );
 
-  describe( "Handling error", function() {
-    beforeEach( function() {
-      wrapper.setState( { data: data } );
+  describe( "Handling error", () => {
+    const sheet = document.getElementById( "rise-google-sheet" );
+
+    beforeEach( () => {
+      wrapper = mount(
+        <Spreadsheet
+          { ...additionalParams }
+          height={ window.innerHeight }
+          width={ window.innerWidth } />
+      );
+
+      wrapper.setState( { data } );
     } );
 
-    it( "should revert state back to initial value", function() {
-      var event = document.createEvent( "Event" ),
-        sheet = document.getElementById( "rise-google-sheet" );
+    it( "should revert state back to initial value", () => {
+      const event = document.createEvent( "Event" );
 
       event.initEvent( "rise-google-sheet-error", true, true );
       event.detail = {};
@@ -181,9 +218,8 @@ describe( "<Spreadsheet />", function() {
       expect( wrapper.state().data ).to.be.null;
     } );
 
-    it( "should ensure state is initial value when quota error and no cached data provided", function() {
-      var event = document.createEvent( "Event" ),
-        sheet = document.getElementById( "rise-google-sheet" );
+    it( "should ensure state is initial value when quota error and no cached data provided", () => {
+      const event = document.createEvent( "Event" );
 
       event.initEvent( "rise-google-sheet-quota", true, true );
       event.detail = {};
@@ -193,9 +229,8 @@ describe( "<Spreadsheet />", function() {
       expect( wrapper.state().data ).to.be.null;
     } );
 
-    it( "should ensure state is updated when quota error and cached data is provided", function() {
-      var event = document.createEvent( "Event" ),
-        sheet = document.getElementById( "rise-google-sheet" );
+    it( "should ensure state is updated when quota error and cached data is provided", () => {
+      const event = document.createEvent( "Event" );
 
       event.initEvent( "rise-google-sheet-quota", true, true );
       event.detail = { results: [ [ "1", "2", "3" ] ] };
@@ -207,9 +242,9 @@ describe( "<Spreadsheet />", function() {
 
   } );
 
-  describe( "Logging", function() {
-    var stub,
-      table = "spreadsheet_events",
+  describe( "Logging", () => {
+    let stub;
+    const table = "spreadsheet_events",
       params = {
         "event": "play",
         "url": additionalParams.spreadsheet.url,
@@ -217,16 +252,23 @@ describe( "<Spreadsheet />", function() {
       },
       sheet = document.getElementById( "rise-google-sheet" );
 
-    beforeEach( function() {
+    beforeEach( () => {
       stub = sinon.stub( LoggerUtils, "logEvent" );
+
+      wrapper = mount(
+        <Spreadsheet
+          { ...additionalParams }
+          height={ window.innerHeight }
+          width={ window.innerWidth } />
+      );
     } );
 
-    afterEach( function() {
+    afterEach( () => {
       LoggerUtils.logEvent.restore();
     } );
 
-    it( "should log the play event", function() {
-      var event = document.createEvent( "Event" ),
+    it( "should log the play event", () => {
+      const event = document.createEvent( "Event" ),
         sheet = document.getElementById( "rise-google-sheet" );
 
       event.initEvent( "rise-google-sheet-response", true, true );
@@ -239,12 +281,12 @@ describe( "<Spreadsheet />", function() {
       expect( stub.withArgs( table, params ).called ).to.equal( true );
     } );
 
-    xit( "should log the done event", function() {
+    xit( "should log the done event", () => {
       // TODO: Needs auto-scroll first.
     } );
 
-    it( "should log the default error event", function() {
-      var event = document.createEvent( "Event" ),
+    it( "should log the default error event", () => {
+      const event = document.createEvent( "Event" ),
         params = {
           "event": "error",
           "event_details": "spreadsheet not reachable",
@@ -265,7 +307,7 @@ describe( "<Spreadsheet />", function() {
       expect( stub.withArgs( table, params ).called ).to.equal( true );
     } );
 
-    it( "should log the error event when spreadsheet is not reachable", function() {
+    it( "should log the error event when spreadsheet is not reachable", () => {
       let event = document.createEvent( "Event" ),
         params = {
           "event": "error",
@@ -290,8 +332,8 @@ describe( "<Spreadsheet />", function() {
       expect( stub.withArgs( table, params ).called ).to.equal( true );
     } );
 
-    it( "should log the error event when spreadsheet is not public ", function() {
-      var event = document.createEvent( "Event" ),
+    it( "should log the error event when spreadsheet is not public ", () => {
+      const event = document.createEvent( "Event" ),
         params = {
           "event": "error",
           "event_details": "spreadsheet not public",
@@ -315,8 +357,8 @@ describe( "<Spreadsheet />", function() {
       expect( stub.withArgs( table, params ).called ).to.equal( true );
     } );
 
-    it( "should log the error event when spreadsheet is not found ", function() {
-      var event = document.createEvent( "Event" ),
+    it( "should log the error event when spreadsheet is not found ", () => {
+      const event = document.createEvent( "Event" ),
         params = {
           "event": "error",
           "event_details": "spreadsheet not found",
@@ -340,8 +382,8 @@ describe( "<Spreadsheet />", function() {
       expect( stub.withArgs( table, params ).called ).to.equal( true );
     } );
 
-    it( "should log the quota error event", function() {
-      var event = document.createEvent( "Event" ),
+    it( "should log the quota error event", () => {
+      const event = document.createEvent( "Event" ),
         params = {
           "event": "error",
           "event_details": "api quota exceeded",
@@ -358,44 +400,50 @@ describe( "<Spreadsheet />", function() {
   } );
 
 
-  describe( "Column formatting", function() {
+  describe( "Column formatting", () => {
 
-    afterEach( function() {
+    afterEach( () => {
       additionalParams.format.columns = columnsParam;
     } );
 
-    describe( "Header text", function() {
-      it( "Should use default header text if custom header text is empty", function() {
-        var expected = [ "Column 1", "Column 2", "Column 3" ];
+    describe( "Header text", () => {
+      it( "Should use default header text if custom header text is empty", () => {
+        const expected = [ "Column 1", "Column 2", "Column 3" ];
 
         additionalParams.format.columns[ 0 ].headerText = "";
-        wrapper = mount( <Spreadsheet initSize={propHandlers.initSize}
-                                     showMessage={propHandlers.showMessage}
-                                     hideMessage={propHandlers.hideMessage} /> );
+        wrapper = shallow(
+          <Spreadsheet
+            { ...additionalParams }
+            height={ window.innerHeight }
+            width={ window.innerWidth } />
+        );
 
-        wrapper.setState( { data: data } );
+        wrapper.setState( { data, message: "" } );
 
-        expect( wrapper.find( TableHeaderContainer ).props().data ).to.deep.equal( expected );
+        expect( wrapper.find( TableHeader ).props().data ).to.deep.equal( expected );
       } );
 
-      it( "should use default header text if column formatting is not defined", function() {
-        var expected = [ "Column 1", "Column 2", "Column 3" ];
+      it( "should use default header text if column formatting is not defined", () => {
+        const expected = [ "Column 1", "Column 2", "Column 3" ];
 
         additionalParams.format.columns = [];
-        wrapper = mount( <Spreadsheet initSize={propHandlers.initSize}
-                                     showMessage={propHandlers.showMessage}
-                                     hideMessage={propHandlers.hideMessage} /> );
+        wrapper = shallow(
+          <Spreadsheet
+            { ...additionalParams }
+            height={ window.innerHeight }
+            width={ window.innerWidth } />
+        );
 
-        wrapper.setState( { data: data } );
+        wrapper.setState( { data, message: "" } );
 
-        expect( wrapper.find( TableHeaderContainer ).props().data ).to.deep.equal( expected );
+        expect( wrapper.find( TableHeader ).props().data ).to.deep.equal( expected );
       } );
     } );
 
-    describe( "columnFormats prop", function() {
+    describe( "columnFormats prop", () => {
       it( "Should set all properties for those columns with formatting applied and should set the " +
-        "width of all other columns", function() {
-        var expected = [
+        "width of all other columns", () => {
+        const expected = [
           {
             id: additionalParams.format.columns[ 0 ].id,
             numeric: false,
@@ -411,34 +459,40 @@ describe( "<Spreadsheet />", function() {
           }
         ];
 
-        wrapper = mount( <Spreadsheet initSize={propHandlers.initSize}
-                                     showMessage={propHandlers.showMessage}
-                                     hideMessage={propHandlers.hideMessage} /> );
+        wrapper = shallow(
+          <Spreadsheet
+            { ...additionalParams }
+            height={ window.innerHeight }
+            width={ window.innerWidth } />
+        );
 
-        wrapper.setState( { data: data } );
+        wrapper.setState( { data, message: "" } );
 
-        expect( wrapper.find( TableHeaderContainer ).props().columnFormats ).to.deep.equal( expected );
+        expect( wrapper.find( TableHeader ).props().columnFormats ).to.deep.equal( expected );
         expect( wrapper.find( Scroll ).props().columnFormats ).to.deep.equal( expected );
       } );
 
       it( "Should return equal width columns if column formatting is not defined on any " +
-        "columns", function() {
-        var expected = [ { width: 200 }, { width: 200 }, { width: 200 } ];
+        "columns", () => {
+        const expected = [ { width: 200 }, { width: 200 }, { width: 200 } ];
 
         additionalParams.format.columns = [];
 
-        wrapper = mount( <Spreadsheet initSize={propHandlers.initSize}
-                                     showMessage={propHandlers.showMessage}
-                                     hideMessage={propHandlers.hideMessage} /> );
+        wrapper = shallow(
+          <Spreadsheet
+            { ...additionalParams }
+            height={ window.innerHeight }
+            width={ window.innerWidth } />
+        );
 
-        wrapper.setState( { data: data } );
+        wrapper.setState( { data, message: "" } );
 
-        expect( wrapper.find( TableHeaderContainer ).props().columnFormats ).to.deep.equal( expected );
+        expect( wrapper.find( TableHeader ).props().columnFormats ).to.deep.equal( expected );
         expect( wrapper.find( Scroll ).props().columnFormats ).to.deep.equal( expected );
       } );
 
-      it( "Should return numeric property as defined by params", function() {
-        var expected = [
+      it( "Should return numeric property as defined by params", () => {
+        const expected = [
           {
             id: additionalParams.format.columns[ 0 ].id,
             numeric: true,
@@ -456,13 +510,16 @@ describe( "<Spreadsheet />", function() {
 
         additionalParams.format.columns[ 0 ].numeric = true;
 
-        wrapper = mount( <Spreadsheet initSize={propHandlers.initSize}
-                                     showMessage={propHandlers.showMessage}
-                                     hideMessage={propHandlers.hideMessage} /> );
+        wrapper = shallow(
+          <Spreadsheet
+            { ...additionalParams }
+            height={ window.innerHeight }
+            width={ window.innerWidth } />
+        );
 
-        wrapper.setState( { data: data } );
+        wrapper.setState( { data, message: "" } );
 
-        expect( wrapper.find( TableHeaderContainer ).props().columnFormats ).to.deep.equal( expected );
+        expect( wrapper.find( TableHeader ).props().columnFormats ).to.deep.equal( expected );
         expect( wrapper.find( Scroll ).props().columnFormats ).to.deep.equal( expected );
       } );
 

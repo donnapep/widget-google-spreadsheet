@@ -1,614 +1,664 @@
 /* global gadgets */
 
-var params = null;
-
+/**
+ * External dependencies
+ */
+import React, { Component, PropTypes } from "react";
 require( "fixed-data-table/dist/fixed-data-table.css" );
-
 require( "../css/fixed-data-table-overrides.css" );
-import React from "react";
-import Scroll from "./scroll";
-import TableHeaderContainer from "../containers/TableHeaderContainer";
-import Logger from "../../components/widget-common/dist/logger";
+
+/**
+ * Internal dependencies
+ */
 import Common from "../../components/widget-common/dist/common";
-import config from "../../config/config";
+import Config from "../../config/config";
+import Logger from "../../components/widget-common/dist/logger";
+import Scroll from "./scroll";
+import TableHeader from "../components/table-header";
 
-const prefs = new gadgets.Prefs(),
-  sheet = document.querySelector( "rise-google-sheet" ),
-  Spreadsheet = React.createClass( {
-    headerClass: "header_font-style",
-    bodyClass: "body_font-style",
-    isLoading: true,
-    viewerPaused: true,
-    errorFlag: false,
-    errorTimer: null,
-    pudTimer: null,
-    errorLog: null,
-    totalCols: 0,
+/**
+ * Module variables
+ */
+const prefs = new gadgets.Prefs();
+const sheet = document.querySelector( "rise-google-sheet" );
+const BODY_CLASS = "body_font-style";
+const API_KEY_DEFAULT = Config.apiKey;
 
+class Spreadsheet extends Component {
+  static propTypes = {
+    format: PropTypes.object.isRequired,
+    height: PropTypes.number.isRequired,
+    scroll: PropTypes.object.isRequired,
+    spreadsheet: PropTypes.object.isRequired,
+    width: PropTypes.number.isRequired,
+  };
 
-    API_KEY_DEFAULT: config.apiKey,
+  constructor() {
+    super();
 
-    getInitialState: function() {
-      return {
-        data: null
-      };
-    },
+    this.state = {
+      data: null,
+      message: "",
+    };
 
-    componentDidMount: function() {
-      var id = new gadgets.Prefs().getString( "id" );
+    this.errorFlag = false;
+    this.isLoading = true;
+    this.totalCols = 0;
+    this.viewerPaused = true;
+  }
 
-      if ( id && id !== "" ) {
-        gadgets.rpc.register( "rscmd_play_" + id, this.play );
-        gadgets.rpc.register( "rscmd_pause_" + id, this.pause );
-        gadgets.rpc.register( "rscmd_stop_" + id, this.stop );
-        gadgets.rpc.register( "rsparam_set_" + id, this.configure );
-        gadgets.rpc.call( "", "rsparam_get", null, id, [ "companyId", "displayId", "additionalParams" ] );
-      }
-    },
+  componentDidMount() {
+    const id = new gadgets.Prefs().getString( "id" );
 
-    componentWillUnmount: function() {
-      sheet.removeEventListener( "rise-google-sheet-response", this.onGoogleSheetResponse );
-      sheet.removeEventListener( "rise-google-sheet-error", this.onGoogleSheetError );
-    },
+    if ( id ) {
+      const rpc = gadgets.rpc;
 
-    configure: function( names, values ) {
-      var additionalParams = null,
-        companyId = "",
-        displayId = "";
+      rpc.register( `rscmd_play_${ id }`, this.play );
+      rpc.register( `rscmd_pause_${ id }`, this.pause );
+      rpc.register( `rscmd_stop_${ id }`, this.stop );
+    }
 
-      if ( Array.isArray( names ) && names.length > 0 && Array.isArray( values ) && values.length > 0 ) {
-        if ( names[ 0 ] === "companyId" ) {
-          companyId = values[ 0 ];
+    const {
+      height,
+      width,
+    } = this.props;
+
+    document.getElementById( "mainContainer" ).style.width = width + "px";
+    document.getElementById( "mainContainer" ).style.height = height + "px";
+
+    this.addRowStyle();
+    this.addSeparatorStyle();
+
+    if ( Common.isLegacy() ) {
+      this.setError( "This version of Spreadsheet Widget is not supported on this version of Rise Player. " +
+        "Please use the latest Rise Player version available from https://help.risevision.com/user/create-a-display" );
+
+      this.isLoading = false;
+      this.ready();
+
+      return;
+    }
+
+    // show wait message while Storage initializes
+    this.setState( { message: "Please wait while your google sheet is loaded." } );
+    this.loadFonts();
+    this.addVerticalAlignmentStyle();
+    this.initRiseGoogleSheet();
+  }
+
+  componentWillUnmount() {
+    sheet.removeEventListener( "rise-google-sheet-response", this.onGoogleSheetResponse );
+    sheet.removeEventListener( "rise-google-sheet-error", this.onGoogleSheetError );
+    sheet.removeEventListener( "rise-google-sheet-quota", this.onGoogleSheetQuota );
+  }
+
+  addRowStyle() {
+    const {
+      evenRowColor,
+      oddRowColor,
+    } = this.props.format;
+
+    Common.addCSSRules( [
+      `.even .fixedDataTableCellGroupLayout_cellGroup {background-color: ${ evenRowColor } !important }`,
+      `.odd .fixedDataTableCellGroupLayout_cellGroup {background-color: ${ oddRowColor } !important }`
+    ] );
+  }
+
+  addSeparatorStyle() {
+    const {
+      color,
+      showColumn,
+      showRow,
+    } = this.props.format.separator;
+    let rules = [];
+
+    if ( !showRow && !showColumn ) {
+      // rely on default css overrides which have all borders transparent but also remove any border that was added
+      rules.push( ".fixedDataTableCellLayout_main {border: none;}" );
+    } else {
+      // colors
+      rules = [
+        `.fixedDataTableCellLayout_main {border-color: ${ color }; }`,
+        `.public_fixedDataTableCell_main {border-color: ${ color }; }`
+      ];
+
+      // row and column separators (border widths of either 1 or 0)
+      let columnBorderW = showColumn ? "1px" : "0";
+      let rowBorderW = showRow ? "1px" : "0";
+
+      rules.push( `.fixedDataTableCellLayout_main {border-style: solid; border-width: 0 ${ columnBorderW } ${ rowBorderW } 0; }` );
+
+      const { hasHeader } = this.props.spreadsheet;
+
+      if ( hasHeader ) {
+        // fill in gap between header and data tables
+        rules.push( ".fixedDataTableLayout_main, .public_fixedDataTable_main {margin-bottom: -2px; }" );
+
+        if ( showRow ) {
+          // apply border color to the border that visually shows to the top of the first row of the data table
+          rules.push( `.public_fixedDataTable_header, .public_fixedDataTable_hasBottomBorder {border-color: ${ color }; }` );
         }
-
-        if ( names[ 1 ] === "displayId" ) {
-          if ( values[ 1 ] ) {
-            displayId = values[ 1 ];
-          } else {
-            displayId = "preview";
-          }
-        }
-
-        Logger.setIds( companyId, displayId );
-
-        if ( names[ 2 ] === "additionalParams" ) {
-          additionalParams = JSON.parse( values[ 2 ] );
-
-          this.setParams( additionalParams );
-        }
-      }
-    },
-
-    setParams: function( additionalParams ) {
-      params = JSON.parse( JSON.stringify( additionalParams ) );
-
-      params.width = prefs.getInt( "rsW" );
-      params.height = prefs.getInt( "rsH" );
-
-      this.init();
-    },
-
-    init: function() {
-      this.props.initSize( params.width, params.height );
-      this.setRowStyle();
-      this.setSeparator();
-
-      if ( Common.isLegacy() ) {
-        this.showError( "This version of Spreadsheet Widget is not supported on this version of Rise Player. " +
-          "Please use the latest Rise Player version available from https://help.risevision.com/user/create-a-display" );
-
-        this.isLoading = false;
-        this.ready();
-
-      } else {
-        // show wait message while Storage initializes
-        this.props.showMessage( "Please wait while your google sheet is loaded." );
-
-        this.loadFonts();
-        this.setVerticalAlignment();
-
-        this.initRiseGoogleSheet();
-      }
-
-    },
-
-    setRowStyle: function() {
-      Common.addCSSRules( [
-        ".even" + " .fixedDataTableCellGroupLayout_cellGroup {background-color: " + params.format.evenRowColor + " !important }",
-        ".odd" + " .fixedDataTableCellGroupLayout_cellGroup {background-color: " + params.format.oddRowColor + " !important }"
-      ] );
-    },
-
-    setVerticalAlignment: function() {
-      if ( params.spreadsheet.hasHeader ) {
-        Common.addCSSRules( [
-          ".header_font-style .fixedDataTableCellLayout_wrap3 {vertical-align: " + params.format.header.fontStyle.verticalAlign + " }"
-        ] );
-      }
-
-      Common.addCSSRules( [
-        ".body_font-style .fixedDataTableCellLayout_wrap3 {vertical-align: " + params.format.body.fontStyle.verticalAlign + " }"
-      ] );
-    },
-
-    setSeparator: function() {
-      var rules = [],
-        columnBorderW,
-        rowBorderW;
-
-      if ( !params.format.separator.showRow && !params.format.separator.showColumn ) {
-        // rely on default css overrides which have all borders transparent but also remove any border that was added
-        rules.push( ".fixedDataTableCellLayout_main {border: none;}" );
-
-      } else {
-
-        // colors
-        rules = [
-          ".fixedDataTableCellLayout_main {border-color: " + params.format.separator.color + "; }",
-          ".public_fixedDataTableCell_main {border-color: " + params.format.separator.color + "; }"
-        ];
-
-        // row and column separators (border widths of either 1 or 0)
-        columnBorderW = ( params.format.separator.showColumn ) ? "1px" : "0";
-        rowBorderW = ( params.format.separator.showRow ) ? "1px" : "0";
-
-        rules.push( ".fixedDataTableCellLayout_main {border-style: solid; border-width: 0 " + columnBorderW +
-          " " + rowBorderW + " 0; }" );
-
-        if ( params.spreadsheet.hasHeader ) {
-          // fill in gap between header and data tables
-          rules.push( ".fixedDataTableLayout_main, .public_fixedDataTable_main {margin-bottom: -2px; }" );
-
-          if ( params.format.separator.showRow ) {
-            // apply border color to the border that visually shows to the top of the first row of the data table
-            rules.push( ".public_fixedDataTable_header, .public_fixedDataTable_hasBottomBorder {border-color: " +
-              params.format.separator.color + "; }" );
-          }
-        }
-      }
-
-      Common.addCSSRules( rules );
-    },
-
-    initRiseGoogleSheet: function() {
-      sheet.addEventListener( "rise-google-sheet-response", this.onGoogleSheetResponse );
-      sheet.addEventListener( "rise-google-sheet-error", this.onGoogleSheetError );
-      sheet.addEventListener( "rise-google-sheet-quota", this.onGoogleSheetQuota );
-
-      sheet.setAttribute( "key", params.spreadsheet.fileId );
-      sheet.setAttribute( "sheet", params.spreadsheet.sheetName );
-      sheet.setAttribute( "refresh", params.spreadsheet.refresh );
-
-      if ( params.spreadsheet.cells === "range" ) {
-        if ( params.spreadsheet.range.startCell && params.spreadsheet.range.endCell ) {
-          sheet.setAttribute( "range", params.spreadsheet.range.startCell + ":" +
-            params.spreadsheet.range.endCell );
-        }
-      }
-
-      // set the API key to the default first
-      sheet.setAttribute( "apikey", this.API_KEY_DEFAULT );
-
-      if ( params.spreadsheet.apiKey ) {
-        sheet.setAttribute( "apikey", params.spreadsheet.apiKey );
-      } else if ( params.spreadsheet.refresh < 60 ) {
-        sheet.setAttribute( "refresh", 60 );
-      }
-
-      sheet.go();
-    },
-
-    onGoogleSheetResponse: function( e ) {
-      this.props.hideMessage();
-
-      if ( e.detail && e.detail.results ) {
-        this.setState( { data: e.detail.results } );
-      }
-
-      if ( this.isLoading ) {
-        this.isLoading = false;
-        this.ready();
-      } else {
-        // in case refresh fixed previous error
-        this.errorFlag = false;
-      }
-    },
-
-    onGoogleSheetError: function( e ) {
-
-      // Show a different message if there is a 403 or 404
-      var statusCode = 0,
-        errorMessage = "The request failed with status code: 0",
-        message = "Error when accessing Spreadsheet.",
-        event_details = "spreadsheet not reachable";
-
-      if ( e.detail.error && e.detail.error.message ) {
-        errorMessage = e.detail.error.message;
-        statusCode = +e.detail.error.message.substring( errorMessage.indexOf( ":" ) + 2 );
-      }
-
-      if ( statusCode == "403" ) {
-        message = "To use this Google Spreadsheet it must be publicly accessible. To do this, open the Google Spreadsheet and select File > Share > Advanced, then select On - Anyone with the link."
-        event_details = "spreadsheet not public";
-      } else if ( statusCode == "404" ) {
-        message = "Spreadsheet does not exist."
-        event_details = "spreadsheet not found";
-      }
-
-      this.showError( message );
-
-      this.logEvent( {
-        "event": "error",
-        "event_details": event_details,
-        "error_details": errorMessage,
-        "url": params.spreadsheet.url,
-        "request_url": ( e.detail.request ) ? e.detail.request.url : "",
-        "api_key": ( params.spreadsheet.apiKey ) ? params.spreadsheet.apiKey : this.API_KEY_DEFAULT
-      }, true );
-
-      this.setState( { data: null } );
-
-      if ( this.isLoading ) {
-        this.isLoading = false;
-        this.ready();
-      }
-    },
-
-    onGoogleSheetQuota: function( e ) {
-      // log the event
-      this.logEvent( {
-        "event": "error",
-        "event_details": "api quota exceeded",
-        "url": params.spreadsheet.url,
-        "api_key": ( params.spreadsheet.apiKey ) ? params.spreadsheet.apiKey : this.API_KEY_DEFAULT
-      }, true );
-
-      if ( e.detail && e.detail.results ) {
-        // cached data provided, process as normal response
-        this.onGoogleSheetResponse( e );
-      } else {
-        this.showError( "The API Key used to retrieve data from the Spreadsheet has exceeded the daily quota. Please use a different API Key." );
-
-        this.setState( { data: null } );
-
-        if ( this.isLoading ) {
-          this.isLoading = false;
-          this.ready();
-        }
-      }
-
-    },
-
-    loadFonts: function() {
-      const { columns } = params.format;
-
-      var fontSettings = [];
-
-      fontSettings.push( {
-        "class": this.headerClass,
-        "fontStyle": params.format.header.fontStyle
-      } );
-
-      fontSettings.push( {
-        "class": this.bodyClass,
-        "fontStyle": params.format.body.fontStyle
-      } );
-
-      fontSettings.push( {
-        "class": this.bodyClass,
-        "fontStyle": params.format.body.fontStyle
-      } );
-
-      columns.forEach( function( column ) {
-        fontSettings.push( {
-          // CSS class can't start with a number.
-          "class": "_" + column.id,
-          "fontStyle": column.fontStyle
-        } );
-      } );
-
-      Common.loadFonts( fontSettings );
-    },
-
-    startPUDTimer: function() {
-      let delay;
-
-      if ( ( params.scroll.pud === undefined ) || ( params.scroll.pud < 1 ) ) {
-        delay = 10000;
-      } else {
-        delay = params.scroll.pud * 1000;
-      }
-
-      this.pudTimer = setTimeout( () => this.done(), delay );
-    },
-
-    ready: function() {
-      gadgets.rpc.call( "", "rsevent_ready", null, prefs.getString( "id" ), true, true, true, true, true );
-    },
-
-    done: function() {
-      gadgets.rpc.call( "", "rsevent_done", null, prefs.getString( "id" ) );
-
-      if ( this.errorLog !== null ) {
-        this.logEvent( this.errorLog, true );
-      }
-
-      this.logEvent( {
-        "event": "done",
-        "url": params.spreadsheet.url,
-        "api_key": ( params.spreadsheet.apiKey ) ? params.spreadsheet.apiKey : this.API_KEY_DEFAULT
-      } );
-    },
-
-    play: function() {
-      this.viewerPaused = false;
-
-      this.logEvent( {
-        "event": "play",
-        "url": params.spreadsheet.url,
-        "api_key": ( params.spreadsheet.apiKey ) ? params.spreadsheet.apiKey : this.API_KEY_DEFAULT
-      } );
-
-      if ( this.errorFlag ) {
-        this.startErrorTimer();
-      }
-
-      if ( this.refs.scrollComponent && this.refs.scrollComponent.canScroll() ) {
-        this.refs.scrollComponent.play();
-      } else {
-        this.startPUDTimer();
-      }
-    },
-
-    pause: function() {
-      this.viewerPaused = true;
-
-      if ( this.refs.scrollComponent ) {
-        this.refs.scrollComponent.pause();
-      }
-
-      if ( this.pudTimer ) {
-        clearTimeout( this.pudTimer );
-      }
-    },
-
-    stop: function() {
-      this.pause();
-    },
-
-    getTableName: function() {
-      return "spreadsheet_events";
-    },
-
-    clearErrorTimer: function() {
-      clearTimeout( this.errorTimer );
-      this.errorTimer = null;
-    },
-
-    startErrorTimer: function() {
-      var self = this;
-
-      this.clearErrorTimer();
-
-      this.errorTimer = setTimeout( function() {
-        // notify Viewer widget is done
-        self.done();
-      }, 5000 );
-    },
-
-    logEvent: function( params, isError ) {
-      if ( isError ) {
-        this.errorLog = params;
-      }
-      Logger.logEvent( this.getTableName(), params );
-    },
-
-    showError: function( messageVal ) {
-      this.errorFlag = true;
-
-      this.props.showMessage( messageVal );
-
-      // if Widget is playing right now, run the timer
-      if ( !this.viewerPaused ) {
-        this.startErrorTimer();
-      }
-    },
-
-    // Calculate the width that is taken up by rendering columns with an explicit width.
-    getColumnWidthObj: function() {
-      const { columns } = params.format;
-
-      var column = null,
-        width = 0,
-        numCols = 0;
-
-      if ( columns !== undefined ) {
-        // For every column formatting option...
-        for ( let j = 0; j < columns.length; j++ ) {
-          column = columns[ j ];
-
-          if ( ( column.width !== undefined ) && ( column.width !== "" ) ) {
-            width += parseInt( column.width, 10 );
-            numCols++;
-          }
-        }
-      } else {
-        width = 0;
-      }
-
-      return {
-        width: width,
-        numCols: numCols
-      };
-    },
-
-    getColumnWidth: function( column ) {
-      if ( ( column.width !== undefined ) && ( column.width !== "" ) ) {
-        return parseInt( column.width, 10 );
-      } else {
-        return this.getDefaultColumnWidth();
-      }
-    },
-
-    getDefaultColumnWidth: function() {
-      const columnWidthObj = this.getColumnWidthObj();
-
-      return ( params.width - columnWidthObj.width ) / ( this.totalCols - columnWidthObj.numCols );
-    },
-
-    getColumnAlignment: function( column ) {
-      if ( ( column.fontStyle !== undefined ) && ( column.fontStyle.align !== undefined )
-        && ( column.fontStyle.align !== "" ) ) {
-        return column.fontStyle.align;
-      } else {
-        return this.getDefaultColumnAlignment();
-      }
-    },
-
-    getDefaultColumnAlignment: function() {
-      return "left";
-    },
-
-    /* Get per column formatting as an object.
-     * Object format: [{id: 0, alignment: "left", width: 100}]
-     * 'width' is always returned; 'id' and 'alignment' are optionally returned.
-     */
-    getColumnFormats: function() {
-      const { columns } = params.format;
-
-      var found = false,
-        column = null,
-        columnFormats = [];
-
-      if ( columns !== undefined ) {
-        // Iterate over every column.
-        for ( let i = 0; i < this.totalCols; i++ ) {
-          found = false;
-          columnFormats[ i ] = {};
-
-          // Iterate over every column format setting.
-          for ( let j = 0; j < columns.length; j++ ) {
-            column = columns[ j ];
-
-            // Map column to formatted column using column id (i.e. column index).
-            if ( i == column.id ) {
-              const columnFormat = columnFormats[ i ];
-
-              columnFormat.id = parseInt( column.id, 10 );
-              columnFormat.numeric = column.numeric ? column.numeric : false;
-              columnFormat.alignment = this.getColumnAlignment( column );
-              columnFormat.width = this.getColumnWidth( column );
-              columnFormat.colorCondition = column.colorCondition;
-              found = true;
-
-              break;
-            }
-          }
-
-          // No column formatting option for just this column.
-          if ( !found ) {
-            columnFormats[ i ].width = this.getDefaultColumnWidth();
-          }
-        }
-      } else {
-        // No per column format settings.
-        for ( let i = 0; i < this.totalCols; i++ ) {
-          columnFormats[ i ] = {};
-          // Equal width columns.
-          columnFormats[ i ].width = params.width / this.totalCols;
-        }
-      }
-
-      return columnFormats;
-    },
-
-    getHeaders: function() {
-      var matchFound = false,
-        column = null,
-        headers = [],
-        { columns } = params.format;
-
-      // Iterate over every column header.
-      for ( let i = 0; i < this.totalCols; i++ ) {
-        matchFound = false;
-
-        // Iterate over every column formatting option.
-        if ( columns !== undefined ) {
-          for ( let j = 0; j < columns.length; j++ ) {
-            column = columns[ j ];
-
-            // Map column to formatted column using column id (i.e. column index).
-            if ( i == column.id ) {
-              if ( ( column.headerText !== undefined ) && ( column.headerText !== "" ) ) {
-                headers.push( column.headerText );
-                matchFound = true;
-              }
-
-              break;
-            }
-          }
-        }
-
-        // Use the header from the spreadsheet.
-        if ( !matchFound ) {
-          headers.push( this.state.data[ 0 ][ i ] );
-        }
-      }
-
-      return headers;
-    },
-
-    getRows: function() {
-      if ( params.spreadsheet.hasHeader ) {
-        return this.state.data.slice( 1 );
-      } else {
-        return this.state.data;
-      }
-    },
-
-    canRenderBody: function() {
-      if ( !params.spreadsheet.hasHeader ) {
-        return true;
-      }
-
-      return this.state.data.length > 1;
-    },
-
-    render: function() {
-      if ( this.state.data ) {
-        this.totalCols = this.state.data[ 0 ].length;
-
-        return (
-          <div id="table">
-          {params.spreadsheet.hasHeader ?
-            <TableHeaderContainer
-              align={params.format.header.fontStyle.align}
-              data={this.getHeaders()}
-              width={params.width}
-              height={params.format.rowHeight}
-              columnFormats={this.getColumnFormats()} />
-              : false}
-            {this.canRenderBody() ?
-              <Scroll
-                ref="scrollComponent"
-                onDone={this.done}
-                hasHeader={params.spreadsheet.hasHeader}
-                scroll={params.scroll}
-                data={this.getRows()}
-                align={params.format.body.fontStyle.align}
-                class={this.bodyClass}
-                totalCols={this.totalCols}
-                rowHeight={params.format.rowHeight}
-                width={params.width}
-                height={params.spreadsheet.hasHeader ? params.height - params.format.rowHeight : params.height}
-                columnFormats={this.getColumnFormats()} />
-            : false}
-          </div>
-        );
-      } else {
-        return null;
       }
     }
-  } );
+
+    Common.addCSSRules( rules );
+  }
+
+  addVerticalAlignmentStyle() {
+    const { hasHeader } = this.props.spreadsheet;
+
+    if ( hasHeader ) {
+      const { verticalAlign } = this.props.format.header.fontStyle;
+
+      Common.addCSSRules( [
+        `.header_font-style .fixedDataTableCellLayout_wrap3 {vertical-align: ${ verticalAlign } }`
+      ] );
+    }
+
+    const { verticalAlign } = this.props.format.body.fontStyle;
+
+    Common.addCSSRules( [
+      `.body_font-style .fixedDataTableCellLayout_wrap3 {vertical-align: ${ verticalAlign } }`
+    ] );
+  }
+
+  loadFonts() {
+    const {
+      body,
+      columns,
+      header,
+    } = this.props.format;
+    const fontSettings = [];
+
+    fontSettings.push( {
+      "class": "header_font-style",
+      "fontStyle": header.fontStyle
+    } );
+
+    fontSettings.push( {
+      "class": BODY_CLASS,
+      "fontStyle": body.fontStyle
+    } );
+
+    fontSettings.push( {
+      "class": BODY_CLASS,
+      "fontStyle": body.fontStyle
+    } );
+
+    columns.forEach( ( { id, fontStyle } ) => {
+      fontSettings.push( {
+        // CSS class can't start with a number.
+        "class": `_${ id }`,
+        "fontStyle": fontStyle
+      } );
+    } );
+
+    Common.loadFonts( fontSettings );
+  }
+
+  initRiseGoogleSheet() {
+    const {
+      apiKey,
+      cells,
+      fileId,
+      refresh,
+      sheetName,
+    } = this.props.spreadsheet;
+
+    sheet.addEventListener( "rise-google-sheet-response", this.onGoogleSheetResponse );
+    sheet.addEventListener( "rise-google-sheet-error", this.onGoogleSheetError );
+    sheet.addEventListener( "rise-google-sheet-quota", this.onGoogleSheetQuota );
+
+    sheet.setAttribute( "key", fileId );
+    sheet.setAttribute( "sheet", sheetName );
+    sheet.setAttribute( "refresh", refresh );
+
+    if ( "range" === cells ) {
+      const {
+        endCell,
+        startCell,
+      } = this.props.spreadsheet.range;
+
+      if ( startCell && endCell ) {
+        sheet.setAttribute( "range", `${ startCell}:${ endCell }` );
+      }
+    }
+
+    // set the API key to the default first
+    sheet.setAttribute( "apikey", API_KEY_DEFAULT );
+
+    if ( apiKey ) {
+      sheet.setAttribute( "apikey", apiKey );
+    } else if ( refresh < 60 ) {
+      sheet.setAttribute( "refresh", 60 );
+    }
+
+    sheet.go();
+  }
+
+  onGoogleSheetResponse = ( { detail } ) => {
+    this.setState( { message: "" } );
+
+    if ( detail && detail.results ) {
+      this.setState( { data: detail.results } );
+    }
+
+    if ( this.isLoading ) {
+      this.isLoading = false;
+      this.ready();
+    } else {
+      // in case refresh fixed previous error
+      this.errorFlag = false;
+    }
+  }
+
+  onGoogleSheetError = ( { detail } ) => {
+    const { url } = this.props.spreadsheet;
+    let errorMessage = "The request failed with status code: 0";
+    let statusCode = 0;
+
+    if ( detail.error && detail.error.message ) {
+      errorMessage = detail.error.message;
+      statusCode = +detail.error.message.substring( errorMessage.indexOf( ":" ) + 2 );
+    }
+
+    let message = "Error when accessing Spreadsheet.";
+    let eventDetails = "spreadsheet not reachable";
+
+    // Show a different message if there is a 403 or 404
+    if ( "403" == statusCode ) {
+      message = "To use this Google Spreadsheet it must be publicly accessible. To do this, open " +
+        "the Google Spreadsheet and select File > Share > Advanced, then select On - Anyone with the link.";
+      eventDetails = "spreadsheet not public";
+    } else if ( "404" == statusCode ) {
+      message = "Spreadsheet does not exist.";
+      eventDetails = "spreadsheet not found";
+    }
+
+    this.setError( message );
+
+    this.logEvent( {
+      "event": "error",
+      "event_details": eventDetails,
+      "error_details": errorMessage,
+      "url": url,
+      "request_url": detail.request ? detail.request.url : "",
+      "api_key": this.getApiKey()
+    }, true );
+
+    this.setState( { data: null } );
+
+    if ( this.isLoading ) {
+      this.isLoading = false;
+      this.ready();
+    }
+  }
+
+  onGoogleSheetQuota = ( e ) => {
+    const { url } = this.props.spreadsheet;
+
+    // log the event
+    this.logEvent( {
+      "event": "error",
+      "event_details": "api quota exceeded",
+      "url": url,
+      "api_key": this.getApiKey()
+    }, true );
+
+    if ( e.detail && e.detail.results ) {
+      // cached data provided, process as normal response
+      this.onGoogleSheetResponse( e );
+      return;
+    }
+
+    this.setError( "The API Key used to retrieve data from the Spreadsheet has exceeded the daily quota. Please use a different API Key." )
+    this.setState( { data: null } );
+
+    if ( this.isLoading ) {
+      this.isLoading = false;
+      this.ready();
+    }
+  }
+
+  ready() {
+    gadgets.rpc.call( "", "rsevent_ready", null, prefs.getString( "id" ), true, true, true, true, true );
+  }
+
+  play = () => {
+    const { url } = this.props.spreadsheet;
+
+    this.viewerPaused = false;
+
+    this.logEvent( {
+      "event": "play",
+      "url": url,
+      "api_key": this.getApiKey()
+    } );
+
+    if ( this.errorFlag ) {
+      this.startErrorTimer();
+    }
+
+    if ( this.scrollComponent && this.scrollComponent.canScroll() ) {
+      this.scrollComponent.play();
+    } else {
+      this.startPUDTimer();
+    }
+  }
+
+  pause = () => {
+    this.viewerPaused = true;
+
+    if ( this.scrollComponent ) {
+      this.scrollComponent.pause();
+    }
+
+    if ( this.pudTimer ) {
+      clearTimeout( this.pudTimer );
+    }
+  }
+
+  stop = () => this.pause();
+
+  done = () => {
+    const { url } = this.props.spreadsheet;
+
+    gadgets.rpc.call( "", "rsevent_done", null, prefs.getString( "id" ) );
+
+    if ( this.errorLog ) {
+      this.logEvent( this.errorLog, true );
+    }
+
+    this.logEvent( {
+      "event": "done",
+      "url": url,
+      "api_key": this.getApiKey()
+    } );
+  }
+
+  setScrollInstance = ref => this.scrollComponent = ref;
+
+  setError( messageVal ) {
+    this.errorFlag = true;
+    this.setState( { message: messageVal } );
+
+    // if Widget is playing right now, run the timer
+    if ( !this.viewerPaused ) {
+      this.startErrorTimer();
+    }
+  }
+
+  startErrorTimer() {
+    this.clearErrorTimer();
+
+    this.errorTimer = setTimeout( () => {
+      // notify Viewer widget is done
+      this.done();
+    }, 5000 );
+  }
+
+  clearErrorTimer() {
+    if ( this.errorTimer ) {
+      clearTimeout( this.errorTimer );
+    }
+
+    this.errorTimer = null;
+  }
+
+  startPUDTimer() {
+    const { pud } = this.props.scroll;
+    let delay;
+
+    if ( ( undefined === pud ) || ( pud < 1 ) ) {
+      delay = 10000;
+    } else {
+      delay = pud * 1000;
+    }
+
+    this.pudTimer = setTimeout( () => this.done(), delay );
+  }
+
+  logEvent( params, isError ) {
+    if ( isError ) {
+      this.errorLog = params;
+    }
+
+    Logger.logEvent( "spreadsheet_events", params );
+  }
+
+  getApiKey() {
+    const { apiKey } = this.props.spreadsheet;
+
+    return apiKey ? apiKey : API_KEY_DEFAULT;
+  }
+
+  // Calculate the width that is taken up by rendering columns with an explicit width.
+  getColumnWidthObj() {
+    const { columns } = this.props.format;
+    let numCols = 0;
+    let width = 0;
+
+    if ( undefined !== columns ) {
+      // For every column formatting option...
+      for ( let j = 0; j < columns.length; j++ ) {
+        const { width: colWidth } = columns[ j ];
+
+        if ( ( undefined !== colWidth ) && ( "" !== colWidth ) ) {
+          width += parseInt( colWidth, 10 );
+          numCols++;
+        }
+      }
+    } else {
+      width = 0;
+    }
+
+    return { width, numCols };
+  }
+
+  getColumnWidth( { width } ) {
+    if ( ( undefined !== width ) && ( "" !== width ) ) {
+      return parseInt( width, 10 );
+    }
+
+    return this.getDefaultColumnWidth();
+  }
+
+  getDefaultColumnWidth() {
+    const { numCols, width } = this.getColumnWidthObj();
+
+    return ( this.props.width - width ) / ( this.totalCols - numCols );
+  }
+
+  getColumnAlignment( { fontStyle } ) {
+    const { align } = fontStyle;
+
+    if ( ( undefined !== fontStyle ) && ( undefined !== align ) && ( "" !== align ) ) {
+      return align;
+    }
+
+    return "left";
+  }
+
+  /* Get per column formatting as an object.
+   * Object format: [{id: 0, alignment: "left", width: 100}]
+   * 'width' is always returned; 'id' and 'alignment' are optionally returned.
+   */
+  getColumnFormats() {
+    const { columns } = this.props.format;
+    let columnFormats = [];
+
+    if ( undefined !== columns ) {
+      let found = false;
+
+      // Iterate over every column.
+      for ( let i = 0; i < this.totalCols; i++ ) {
+        found = false;
+        columnFormats[ i ] = {};
+
+        // Iterate over every column format setting.
+        for ( let j = 0; j < columns.length; j++ ) {
+          const { colorCondition, id, numeric } = columns[ j ];
+
+          // Map column to formatted column using column id (i.e. column index).
+          if ( i == id ) {
+            const columnFormat = columnFormats[ i ];
+
+            columnFormat.id = parseInt( id, 10 );
+            columnFormat.numeric = numeric ? numeric : false;
+            columnFormat.alignment = this.getColumnAlignment( columns[ j ] );
+            columnFormat.width = this.getColumnWidth( columns[ j ] );
+            columnFormat.colorCondition = colorCondition;
+            found = true;
+
+            break;
+          }
+        }
+
+        // No column formatting option for just this column.
+        if ( !found ) {
+          columnFormats[ i ].width = this.getDefaultColumnWidth();
+        }
+      }
+    } else {
+      const { width } = this.props;
+
+      // No per column format settings.
+      for ( let i = 0; i < this.totalCols; i++ ) {
+        columnFormats[ i ] = {};
+        // Equal width columns.
+        columnFormats[ i ].width = width / this.totalCols;
+      }
+    }
+
+    return columnFormats;
+  }
+
+  getHeaders() {
+    const { columns } = this.props.format;
+    let headers = [];
+    let matchFound = false;
+
+    // Iterate over every column header.
+    for ( let i = 0; i < this.totalCols; i++ ) {
+      matchFound = false;
+
+      // Iterate over every column formatting option.
+      if ( undefined !== columns ) {
+        for ( let j = 0; j < columns.length; j++ ) {
+          const { headerText, id } = columns[ j ];
+
+          // Map column to formatted column using column id (i.e. column index).
+          if ( i == id ) {
+            if ( ( undefined !== headerText ) && ( "" !== headerText ) ) {
+              headers.push( headerText );
+              matchFound = true;
+            }
+
+            break;
+          }
+        }
+      }
+
+      // Use the header from the spreadsheet.
+      if ( !matchFound ) {
+        headers.push( this.state.data[ 0 ][ i ] );
+      }
+    }
+
+    return headers;
+  }
+
+  getRows() {
+    const { data } = this.state;
+
+    if ( this.props.spreadsheet.hasHeader ) {
+      return data.slice( 1 );
+    }
+
+    return data;
+  }
+
+  shouldRenderTable( hasHeader, data ) {
+    if ( !hasHeader ) {
+      return true;
+    }
+
+    return data.length > 1;
+  }
+
+  renderTableHeader( columnFormats ) {
+    const { align } = this.props.format.header.fontStyle;
+    const { rowHeight } = this.props.format;
+    const { width } = this.props;
+
+    return (
+      <TableHeader
+        align={ align }
+        columnFormats={ columnFormats }
+        data={ this.getHeaders() }
+        height={ rowHeight }
+        width={ width } />
+    );
+  }
+
+  renderTable( hasHeader, columnFormats ) {
+    const {
+      body,
+      rowHeight,
+    } = this.props.format;
+    const {
+      height,
+      scroll,
+      width,
+    } = this.props;
+    const data = this.getRows();
+
+    return (
+      <Scroll
+        align={ body.fontStyle.align }
+        className={ BODY_CLASS }
+        columnFormats={ columnFormats }
+        data={ data }
+        hasHeader={ hasHeader }
+        height={ hasHeader ? height - rowHeight : height }
+        onDone={ this.done }
+        ref={ this.setScrollInstance }
+        rowHeight={ rowHeight }
+        scroll={ scroll }
+        width={ width } />
+    );
+  }
+
+  render() {
+    const {
+      data,
+      message,
+    } = this.state;
+
+    this.totalCols = data ? data[ 0 ].length : 0;
+
+    const { hasHeader } = this.props.spreadsheet;
+    const columnFormats = this.getColumnFormats();
+
+    return (
+      <div className="main">
+        { data && !message &&
+          <div className="spreadsheetContainer">
+            <div className="table">
+              { hasHeader && this.renderTableHeader( columnFormats ) }
+              { this.shouldRenderTable( hasHeader, data ) && this.renderTable( hasHeader, columnFormats ) }
+            </div>
+          </div>
+        }
+
+        { message &&
+          <div className="messageContainer">
+            <p className="message">{ message }</p>
+          </div>
+        }
+      </div>
+    );
+  }
+}
 
 export default Spreadsheet;

@@ -1,26 +1,20 @@
 /* global describe, before, beforeEach, after, afterEach, it, sinon  */
 
 import React from "react";
-import { mount } from "enzyme";
+import { shallow } from "enzyme";
 import { expect } from "chai";
 import Spreadsheet from "../../../src/widget/components/spreadsheet";
-import TableHeaderContainer from "../../../src/widget/containers/TableHeaderContainer";
-import Table from "../../../src/widget/components/table";
+import Scroll from "../../../src/widget/components/scroll";
 import "../../data/spreadsheet-range";
 
-describe( "Spreadsheet Range", function() {
-
+describe( "Spreadsheet Range", () => {
   let server,
     wrapper;
-  const data = [ [ "Column 1", "Column 2", "Column 3" ], [ "A2", "B2", "C2" ] ];
 
-  var propHandlers = {
-    initSize: function() {},
-    showMessage: function() {},
-    hideMessage: function() {}
-  };
+  const additionalParams = window.gadget.settings.additionalParams,
+    data = [ [ "Column 1", "Column 2", "Column 3" ], [ "A2", "B2", "C2" ] ];
 
-  before( function() {
+  before( () => {
     server = sinon.fakeServer.create();
     server.respondImmediately = true;
     server.respondWith( "GET", "https://sheets.googleapis.com/v4/spreadsheets/xxxxxxxxxx?key=abc123",
@@ -28,119 +22,94 @@ describe( "Spreadsheet Range", function() {
         "{ \"sheets\": [{ \"properties\": { \"title\": \"Sheet1\" } }] }" ] );
   } );
 
-  beforeEach( function() {
-    wrapper = mount( <Spreadsheet initSize={propHandlers.initSize}
-                                 showMessage={propHandlers.showMessage}
-                                 hideMessage={propHandlers.hideMessage} /> );
+  beforeEach( () => {
+    wrapper = shallow(
+      <Spreadsheet
+        { ...additionalParams }
+        height={ window.innerHeight }
+        width={ window.innerWidth } />
+    );
   } );
 
-  after( function() {
+  after( () => {
     server.restore();
   } );
 
-  describe( "<TableHeaderContainer />", function() {
-    beforeEach( function() {
-      wrapper.setState( { data: data } );
+  describe( "<Scroll />", () => {
+    beforeEach( () => {
+      wrapper.setState( { data, message: "" } );
     } );
 
-    it( "Should contain a TableHeaderContainer component", function() {
-      expect( wrapper.find( TableHeaderContainer ) ).to.have.length( 1 );
+    it( "Should contain a Scroll component", () => {
+      expect( wrapper.find( Scroll ) ).to.have.length( 1 );
     } );
 
-    it( "Should have data prop", function() {
-      var expected = [ "Custom Header", "Column 2", "Column 3" ];
-
-      expect( wrapper.find( TableHeaderContainer ).props().data ).to.deep.equal( expected );
-    } );
-
-  } );
-
-  describe( "<Table />", function() {
-    beforeEach( function() {
-      wrapper.setState( { data: data } );
-    } );
-
-    it( "Should contain a Table component", function() {
-      expect( wrapper.find( Table ) ).to.have.length( 1 );
-    } );
-
-    it( "Should have data prop", function() {
-      expect( wrapper.find( Table ).props().data ).to.deep.equal( [ data[ 1 ] ] );
-    } );
-
-    it( "Should have totalCols prop", function() {
-      expect( wrapper.find( Table ).props().totalCols ).to.equal( 3 );
+    it( "Should have data prop", () => {
+      expect( wrapper.find( Scroll ).props().data ).to.deep.equal( [ data[ 1 ] ] );
     } );
   } );
 
-  describe( "Don't Use First Row As Header", function() {
-    beforeEach( function() {
-      window.gadget.settings.additionalParams.spreadsheet.hasHeader = false;
-      wrapper = mount( <Spreadsheet initSize={propHandlers.initSize}
-                                   showMessage={propHandlers.showMessage}
-                                   hideMessage={propHandlers.hideMessage} /> );
-      wrapper.setState( { data: data } );
+  describe( "Don't Use First Row As Header", () => {
+    beforeEach( () => {
+      additionalParams.spreadsheet.hasHeader = false;
+      wrapper = shallow(
+        <Spreadsheet
+          { ...additionalParams }
+          height={ window.innerHeight }
+          width={ window.innerWidth } />
+      );
+      wrapper.setState( { data, message: "" } );
     } );
 
-    afterEach( function() {
-      window.gadget.settings.additionalParams.spreadsheet.hasHeader = true;
+    afterEach( () => {
+      additionalParams.spreadsheet.hasHeader = true;
     } );
 
-    it( "Should not contain a TableHeaderContainer component", function() {
-      expect( wrapper.find( TableHeaderContainer ) ).to.have.length( 0 );
-    } );
-
-    it( "Should have data prop", function() {
-      expect( wrapper.find( Table ).props().data ).to.deep.equal( data );
-    } );
-  } );
-
-  describe( "Single cell range", function() {
-
-    beforeEach( function() {
-      wrapper = mount( <Spreadsheet initSize={propHandlers.initSize}
-                                   showMessage={propHandlers.showMessage}
-                                   hideMessage={propHandlers.hideMessage} /> );
-      wrapper.setState( { data: [ [ "Cell B3" ] ] } );
-    } );
-
-    it( "Should contain a TableHeaderContainer component", function() {
-      expect( wrapper.find( TableHeaderContainer ) ).to.have.length( 1 );
-    } );
-
-    it( "Should have data prop", function() {
-      expect( wrapper.find( TableHeaderContainer ).props().data ).to.deep.equal( [ "Custom Header" ] );
-    } );
-
-    it( "Should not contain a Table component", function() {
-      expect( wrapper.find( Table ) ).to.have.length( 0 );
+    it( "Should have data prop", () => {
+      expect( wrapper.find( Scroll ).props().data ).to.deep.equal( data );
     } );
   } );
 
-  describe( "Single cell range without first row as header", function() {
+  describe( "Single cell range", () => {
 
-    beforeEach( function() {
-      window.gadget.settings.additionalParams.spreadsheet.hasHeader = false;
-      wrapper = mount( <Spreadsheet initSize={propHandlers.initSize}
-                                   showMessage={propHandlers.showMessage}
-                                   hideMessage={propHandlers.hideMessage} /> );
-      wrapper.setState( { data: [ [ "B3" ] ] } );
+    beforeEach( () => {
+      wrapper = shallow(
+        <Spreadsheet
+          { ...additionalParams }
+          height={ window.innerHeight }
+          width={ window.innerWidth } />
+      );
+      wrapper.setState( { data: [ [ "Cell B3" ] ], message: "" } );
     } );
 
-    afterEach( function() {
-      window.gadget.settings.additionalParams.spreadsheet.hasHeader = true;
+    it( "Should not contain a Scroll component", () => {
+      expect( wrapper.find( Scroll ) ).to.have.length( 0 );
+    } );
+  } );
+
+  describe( "Single cell range without first row as header", () => {
+
+    beforeEach( () => {
+      additionalParams.spreadsheet.hasHeader = false;
+      wrapper = shallow(
+        <Spreadsheet
+          { ...additionalParams }
+          height={ window.innerHeight }
+          width={ window.innerWidth } />
+      );
+      wrapper.setState( { data: [ [ "B3" ] ], message: "" } );
     } );
 
-    it( "Should not contain a TableHeaderContainer component", function() {
-      expect( wrapper.find( TableHeaderContainer ) ).to.have.length( 0 );
+    afterEach( () => {
+      additionalParams.spreadsheet.hasHeader = true;
     } );
 
-    it( "Should contain a Table component", function() {
-      expect( wrapper.find( Table ) ).to.have.length( 1 );
+    it( "Should contain a Scroll component", () => {
+      expect( wrapper.find( Scroll ) ).to.have.length( 1 );
     } );
 
-    it( "Should have data prop", function() {
-      expect( wrapper.find( Table ).props().data ).to.deep.equal( [ [ "B3" ] ] );
+    it( "Should have data prop", () => {
+      expect( wrapper.find( Scroll ).props().data ).to.deep.equal( [ [ "B3" ] ] );
     } );
 
   } );
