@@ -1,70 +1,86 @@
+/**
+ * External dependencies
+ */
+import React, { PropTypes } from "react";
+import { Column } from "fixed-data-table";
+import ResponsiveFixedDataTable from "../../components/responsive-fixed-data-table/lib/responsive-fixed-data-table";
 require( "fixed-data-table/dist/fixed-data-table.min.css" );
 
-import React from "react";
-import { Column } from "fixed-data-table";
-import CellContainer from "../containers/CellContainer";
-import ResponsiveFixedDataTable from "../../components/responsive-fixed-data-table/lib/responsive-fixed-data-table";
+/**
+ * Internal dependencies
+ */
+import TableCell from "../components/table-cell";
 
-const Table = React.createClass( {
-
-  getAlignment: function( index ) {
-    var { align, columnFormats } = this.props;
-
+const Table = ( {
+  align,
+  className,
+  columnFormats,
+  data,
+  height,
+  rowHeight,
+  width,
+} ) => {
+  const getAlignment = index => {
     // Column formatting overrides header formatting.
     if ( columnFormats[ index ].alignment ) {
       return columnFormats[ index ].alignment;
-    } else if ( align ) {
-      return align;
-    } else {
-      return "left";
     }
-  },
 
-  getRowClassName: function( index ) {
-    // add 1 to index value so the first row is considered odd
-    return ( ( index + 1 ) % 2 ) ? "odd" : "even";
-  },
+    return align ? align : "left";
+  };
 
-  render: function() {
-    var cols = [],
-      i;
+  const getRowClassName = index => ( ( index + 1 ) % 2 ) ? "odd" : "even";
+
+  const renderColumns = () => {
+    let cols = [],
+      totalCols = data[ 0 ].length;
 
     // Create the columns.
-    for ( i = 0; i < this.props.totalCols; i++ ) {
+    for ( let i = 0; i < totalCols; i++ ) {
       cols.push(
         <Column
-          key={i}
-          columnKey={i}
-          align={this.getAlignment( i )}
-          width={this.props.columnFormats[ i ].width}
-          cell={ props => (
-            <CellContainer
-              width={props.width}
-              height={props.height}
-              data={this.props.data[ props.rowIndex ][ props.columnKey ]}
-              mainClass={this.props.class}
-              columnKey={props.columnKey}
-              columnFormats={this.props.columnFormats}>
-            </CellContainer>
-          )}
-        />
+          align={ getAlignment( i ) }
+          cell={ ( { columnKey, height, rowIndex, width } ) => (
+            <TableCell
+              className={ className }
+              columnFormats={ columnFormats }
+              columnKey={ columnKey }
+              data={ data[ rowIndex ][ columnKey ] }
+              height={ height }
+              width={ width } />
+          ) }
+          columnKey={ i }
+          key={ i }
+          width={ columnFormats[ i ].width } />
       );
     }
 
-    return (
-      <ResponsiveFixedDataTable
-        rowHeight={this.props.rowHeight}
-        rowsCount={this.props.data.length}
-        rowClassNameGetter={this.getRowClassName}
-        width={this.props.width}
-        height={this.props.height}
-        headerHeight={0}
-        overflowY="hidden"
-        overflowX="hidden">
-        {cols}
-      </ResponsiveFixedDataTable>
-    );
-  }
-} );
+    return cols;
+  };
+
+  return (
+    <ResponsiveFixedDataTable
+      headerHeight={ 0 }
+      height={ height }
+      overflowX="hidden"
+      overflowY="hidden"
+      rowClassNameGetter={ getRowClassName }
+      rowHeight={ rowHeight }
+      rowsCount={ data.length }
+      width={ width }>
+      { renderColumns() }
+    </ResponsiveFixedDataTable>
+  );
+};
+
+Table.propTypes = {
+  align: PropTypes.string,
+  className: PropTypes.string,
+  columnFormats: PropTypes.array,
+  data: PropTypes.array,
+  height: PropTypes.number,
+  rowHeight: PropTypes.number,
+  width: PropTypes.number,
+};
 
 export default Table;
