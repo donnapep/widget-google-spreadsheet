@@ -3,6 +3,7 @@
   "globals": {
     "angular": 1
   },
+  "parser": "babel-eslint",
   "parserOptions": {
     "ecmaVersion": 6,
     "sourceType": "module",
@@ -19,6 +20,7 @@
     "react"
   ],
   "rules": {
+    "one-var": 0,
     "quotes": [
       "error",
       "double"
