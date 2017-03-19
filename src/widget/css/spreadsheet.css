@@ -34,11 +34,11 @@ body {
   background-color: transparent;
 }
 
-html, body, #app, #main, #scroll, #table {
+html, body, .main, .scroll, .table {
   height: 100%;
 }
 
-#spreadsheetContainer {
+.spreadsheetContainer {
   position: relative;
   top: 0;
   left: 0;
@@ -46,7 +46,7 @@ html, body, #app, #main, #scroll, #table {
   height: 100%;
 }
 
-#messageContainer {
+.messageContainer {
   position: absolute;
   top: 0;
   left: 0;
@@ -59,14 +59,6 @@ html, body, #app, #main, #scroll, #table {
   top: 50%;
   transform: translateY(-50%);
   text-align: center;
-}
-
-.show {
-  display: block;
-}
-
-.hide {
-  display: none;
 }
 
 .green {
