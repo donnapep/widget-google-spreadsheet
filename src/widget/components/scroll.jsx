@@ -1,67 +1,109 @@
-var $ = require( "jquery" );
-
-require( "fixed-data-table/dist/fixed-data-table.min.css" );
-
-import React from "react";
-import Table from "./table";
-
-
+/**
+ * External dependencies
+ */
+import React, { Component, PropTypes } from "react";
 import "../../components/gsap/src/uncompressed/TweenLite"
 import "../../components/gsap/src/uncompressed/plugins/CSSPlugin";
 import "../../components/gsap/src/uncompressed/utils/Draggable";
 import "../../components/gsap/src/uncompressed/plugins/ScrollToPlugin";
-
 import "../../components/auto-scroll/jquery.auto-scroll";
+require( "fixed-data-table/dist/fixed-data-table.min.css" );
 
-const Scroll = React.createClass( {
+/**
+ * Internal dependencies
+ */
+import Table from "./table";
 
-  scroll: "",
+/**
+ * Module variables
+ */
+const $ = require( "jquery" );
 
-  componentDidMount: function() {
-    this.scroll = $( this.refs.scroll );
+class Scroll extends Component {
+  static propTypes = {
+    align: PropTypes.string,
+    className: PropTypes.string,
+    columnFormats: PropTypes.array,
+    data: PropTypes.array,
+    hasHeader: PropTypes.bool,
+    height: PropTypes.number,
+    onDone: PropTypes.func,
+    rowHeight: PropTypes.number,
+    scroll: PropTypes.object,
+    width: PropTypes.number,
+  };
 
-    $( this.refs.page ).height( ( this.props.data.length * this.props.rowHeight ) + ( ( this.props.hasHeader ) ? this.props.rowHeight : 0 ) );
+  componentDidMount() {
+    const {
+      data,
+      hasHeader,
+      onDone,
+      rowHeight,
+      scroll,
+    } = this.props;
 
-    this.scroll.autoScroll( this.props.scroll ).on( "done", () => {
-      this.props.onDone();
+    $( this.page ).height( ( data.length * rowHeight ) + ( ( hasHeader ) ? rowHeight : 0 ) );
+
+    this.scroll.autoScroll( scroll ).on( "done", () => {
+      onDone();
     } );
-  },
+  }
 
-  canScroll: function() {
-    return this.props.scroll.by !== "none" && this.scroll && this.scroll.data( "plugin_autoScroll" ) &&
+  setScrollInstance = ref => this.scroll = $( ref );
+
+  setPageInstance = ref => this.page = ref;
+
+  hasScrollInstance() {
+    return this.scroll && this.scroll.data( "plugin_autoScroll" );
+  }
+
+  canScroll() {
+    return this.props.scroll.by !== "none" && this.hasScrollInstance() &&
       this.scroll.data( "plugin_autoScroll" ).canScroll();
-  },
+  }
 
-  play: function() {
-    if ( this.scroll && this.scroll.data( "plugin_autoScroll" ) ) {
-      this.scroll.data( "plugin_autoScroll" ).play();
+  play() {
+    if ( !this.hasScrollInstance() ) {
+      return;
     }
-  },
 
-  pause: function() {
-    if ( this.scroll && this.scroll.data( "plugin_autoScroll" ) ) {
-      this.scroll.data( "plugin_autoScroll" ).pause();
+    this.scroll.data( "plugin_autoScroll" ).play();
+  }
+
+  pause() {
+    if ( !this.hasScrollInstance() ) {
+      return;
     }
-  },
 
-  render: function() {
+    this.scroll.data( "plugin_autoScroll" ).pause();
+  }
+
+  render() {
+    const {
+      align,
+      className,
+      columnFormats,
+      data,
+      height,
+      rowHeight,
+      width,
+    } = this.props;
 
     return (
-      <div id="scroll" ref="scroll">
-        <section className="page" ref="page">
-            <Table
-              data={this.props.data}
-              align={this.props.align}
-              class={this.props.class}
-              totalCols={this.props.totalCols}
-              rowHeight={this.props.rowHeight}
-              width={this.props.width}
-              height={this.props.height}
-              columnFormats={this.props.columnFormats} />
+      <div className="scroll" ref={ this.setScrollInstance }>
+        <section className="page" ref={ this.setPageInstance }>
+          <Table
+            align={ align }
+            className={ className }
+            columnFormats={ columnFormats }
+            data={ data }
+            height={ height }
+            rowHeight={ rowHeight }
+            width={ width } />
         </section>
       </div>
     );
   }
-} );
+}
 
 export default Scroll;
